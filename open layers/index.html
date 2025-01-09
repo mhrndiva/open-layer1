@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interactive Map</title>
+  
+  <!-- OpenLayers CSS -->
+  <link href="https://cdn.skypack.dev/ol/ol.css" rel="stylesheet">
+  
+  <!-- Main JS and Popup JS -->
+  <script type="module" src="/main.js"></script>
+  <script type="module" src="/popup.js"></script>
+
+  <style>
+    /* General Reset */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Arial', sans-serif;
+      background-color: #f4f4f9;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+
+    /* Map */
+    #map {
+      width: 100%;
+      height: 60vh;
+      border-radius: 10px;
+      background-color: #6a0dad;
+      border: 2px solid #5a0da9;
+    }
+
+    /* Locations List */
+    #locations {
+      margin-top: 20px;
+      width: 100%;
+      max-width: 700px;
+      background-color: #ffffff;
+      padding: 20px;
+      border-radius: 8px;
+    }
+
+    h3 {
+      font-size: 1.8em;
+      color: #6a0dad;
+      text-align: center;
+      margin-bottom: 15px;
+    }
+
+    #location-list {
+      margin-top: 15px;
+      list-style: none;
+      padding: 0;
+    }
+
+    #location-list li {
+      padding: 12px;
+      background-color: #f2e6f2;
+      margin-bottom: 12px;
+      border-radius: 6px;
+      border: 1px solid #ddd;
+      transition: background-color 0.3s ease;
+    }
+
+    #location-list li:hover {
+      background-color: #e6d6f0;
+    }
+
+    /* Popup Styles */
+    .popup {
+  position: fixed; /* Fixed positioning to keep it at the center */
+  top: 50%; /* Center vertically */
+  left: 50%; /* Center horizontally */
+  transform: translate(-50%, -50%); /* Adjust to ensure it's truly centered */
+  width: 100%;
+  max-width: 400px;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  transition: opacity 0.3s ease-in-out;
+}
+
+    .popup.hidden {
+      display: none;
+      opacity: 0;
+    }
+  
+  #custom-popup {
+  position: fixed; /* Posisi tetap di layar */
+  top: 50%; /* Posisikan vertikal di tengah */
+  left: 50%; /* Posisikan horizontal di tengah */
+  transform: translate(-50%, -50%); /* Sesuaikan agar benar-benar di tengah */
+  width: 100%;
+  max-width: 400px;
+  background: rgba(0, 0, 0, 0.7);
+  display: none; /* Tampilkan atau sembunyikan menggunakan display */
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  transition: opacity 0.3s ease-in-out;
+}
+
+    .popup-content {
+      background: #ffffff;
+  padding: 25px 30px;
+  border-radius: 12px;
+  text-align: center;
+  width: 100%;
+  max-width: 400px;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: fadeIn 0.3s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: scale(0.9);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    .popup-title {
+      font-size: 1.6em;
+      color: #6a0dad;
+      margin-bottom: 10px;
+    }
+
+    .popup-message {
+      font-size: 1em;
+      color: #555;
+      margin-bottom: 20px;
+      line-height: 1.4;
+    }
+
+    .popup-buttons {
+      display: flex;
+      justify-content: center; /* Center the buttons horizontally */
+      align-items: center;    /* Center the buttons vertically */
+    }
+
+    button {
+      padding: 12px 18px;
+      margin: 5px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background-color 0.3s ease;
+      font-size: 1em;
+    }
+
+    #save-location {
+      background: #8b008b;
+      color: white;
+      border: 2px solid #6a0dad;
+    }
+
+    #cancel-location {
+      background: #9c27b0;
+      color: white;
+      border: 2px solid #6a0dad;
+    }
+
+    #close-popup {
+      background: #6a0dad;
+      color: white;
+      border: 2px solid #6a0dad;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    /* Mobile Responsiveness */
+    @media (max-width: 768px) {
+      #map {
+        height: 50vh;
+      }
+
+      .popup-content {
+        width: 85%;
+      }
+    }
+
+  </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="locations">
+      <h3>Saved Locations:</h3>
+      <ul id="location-list"></ul>
+    </div>
+
+    <!-- Popup for location details -->
+    <div id="marker-popup" class="popup hidden">
+      <div class="popup-content">
+        <h3 class="popup-title">Marker Information</h3>
+        <p class="popup-message"></p>
+        <div class="popup-buttons">
+          <button id="close-popup">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Popup for saving location -->
+    <div id="input-popup" class="popup hidden">
+      <div class="popup-content">
+        <h3>Save Location</h3>
+        <p id="popup-coordinates"></p>
+        <textarea id="location-description" placeholder="Enter description here..."></textarea>
+        <div class="popup-buttons">
+          <button id="save-location">Save</button>
+          <button id="cancel-location">Cancel</button>
+        </div>
+      </div>
+    </div>
+</body>
+</html>
