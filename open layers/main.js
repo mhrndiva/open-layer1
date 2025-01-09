@@ -6,189 +6,222 @@ import VectorLayer from 'https://cdn.skypack.dev/ol/layer/Vector.js';
 import VectorSource from 'https://cdn.skypack.dev/ol/source/Vector.js';
 import Feature from 'https://cdn.skypack.dev/ol/Feature.js';
 import Point from 'https://cdn.skypack.dev/ol/geom/Point.js';
-import { fromLonLat, toLonLat } from 'https://cdn.skypack.dev/ol/proj.js';
 import { Icon, Style } from 'https://cdn.skypack.dev/ol/style.js';
+import { fromLonLat, toLonLat } from 'https://cdn.skypack.dev/ol/proj.js';
+import * as turf from 'https://cdn.skypack.dev/@turf/turf';
+import Swal from 'https://cdn.jsdelivr.net/npm/sweetalert2@11/src/sweetalert2.js';
+import { addCSS } from 'https://cdn.jsdelivr.net/gh/jscroot/lib@0.0.9/element.js';
 
-// Sumber data untuk marker
-const markerSource = new VectorSource();
+addCSS('https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.css');
 
-// Layer untuk marker
-const markerLayer = new VectorLayer({
-  source: markerSource
-});
-
+// Initialize the map
 const map = new Map({
   target: 'map',
   layers: [
-    new TileLayer({ source: new OSM() }),
-    markerLayer
+    new TileLayer({
+      source: new OSM(),
+    }),
   ],
   view: new View({
-    center: fromLonLat([107.9019822944495, -7.215907720160664]),
-    zoom: 12
-  })
+    center: fromLonLat([107.54249456754211, -6.884723248778016]),
+    zoom: 8,
+  }),
 });
 
-const savedLocations = [];
-let currentCoordinate = null;
+// Marker Layer Setup
+const markerSource = new VectorSource();
+const markerLayer = new VectorLayer({
+  source: markerSource,
+});
+map.addLayer(markerLayer);
 
-const popup = document.getElementById('input-popup');
-const popupCoordinates = document.getElementById('popup-coordinates');
-const descriptionInput = document.getElementById('location-description');
-const saveButton = document.getElementById('save-location');
-const cancelButton = document.getElementById('cancel-location');
+// Popup Elements
+const popup = document.getElementById('popup');
+const descriptionInput = document.getElementById('marker-description');
+const addMarkerButton = document.getElementById('add-marker');
+const cancelButton = document.getElementById('cancel');
+let selectedCoordinates = null;
 
-// Fungsi untuk mendapatkan data lokasi menggunakan Nominatim API
-async function fetchLocationData(longitude, latitude) {
-  const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`;
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error('Failed to fetch location data');
-    }
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Error fetching location data:', error);
-    return null;
-  }
-}
+// Handle map click event for selecting coordinates
+map.on('click', (event) => {
+  const coordinates = toLonLat(event.coordinate);
+  const longitude = coordinates[0].toFixed(6);
+  const latitude = coordinates[1].toFixed(6);
 
-// Menambahkan event listener untuk klik pada peta
-map.on('click', async (event) => {
-  const feature = map.forEachFeatureAtPixel(event.pixel, (feature) => feature);
+  selectedCoordinates = event.coordinate;
 
-  // Jika klik pada marker yang sudah ada
-  if (feature) {
-    const props = feature.getProperties();
-    if (props.description) {
-      const pixel = map.getPixelFromCoordinate(feature.getGeometry().getCoordinates());
-      showPopup(
-        'Marker Information',
-        `Longitude: ${props.longitude}\nLatitude: ${props.latitude}\nDescription: ${props.description}`,
-        pixel
-      );
-    }
-    return;
-  }
-
-  // Jika bukan marker, ambil koordinat klik
-  currentCoordinate = event.coordinate;
-  const lonLat = toLonLat(currentCoordinate);
-  const longitude = lonLat[0].toFixed(6);
-  const latitude = lonLat[1].toFixed(6);
-
-  // Ambil data lokasi menggunakan Nominatim API
-  const locationData = await fetchLocationData(longitude, latitude);
-
-  if (locationData) {
-    const { address } = locationData;
-    const locationInfo = `
-      <strong>Coordinates:</strong> ${longitude}, ${latitude}<br>
-      <strong>Street:</strong> ${address.road || 'Not Available'}<br>
-      <strong>Village:</strong> ${address.village || 'Not Available'}<br>
-      <strong>District:</strong> ${address.suburb || 'Not Available'}<br>
-      <strong>City:</strong> ${address.city || address.town || 'Not Available'}<br>
-      <strong>State:</strong> ${address.state || 'Not Available'}<br>
-      <strong>Country:</strong> ${address.country || 'Not Available'}
-    `;
-
-    // Tampilkan informasi lokasi di popup
-    const pixel = map.getPixelFromCoordinate(currentCoordinate);
-    showSavePopup(longitude, latitude, locationInfo, pixel);
-  } else {
-    // Jika data lokasi tidak dapat diambil, tampilkan pesan error
-    const pixel = map.getPixelFromCoordinate(currentCoordinate);
-    showPopup('Error', 'Unable to fetch location data.', pixel);
-  }
+  popup.querySelector('h3').textContent = `Masukkan Lokasi:\nLongitude: ${longitude}\nLatitude: ${latitude}`;
+  popup.classList.remove('hidden');
 });
 
-// Simpan lokasi saat tombol "Save" diklik
-saveButton.addEventListener('click', () => {
+// Add marker to map when 'Add Marker' button is clicked
+addMarkerButton.addEventListener('click', () => {
   const description = descriptionInput.value.trim();
-  if (description && currentCoordinate) {
-    const lonLat = toLonLat(currentCoordinate);
-
-    // Simpan lokasi dengan informasi lengkap
-    savedLocations.push({
-      longitude: lonLat[0],
-      latitude: lonLat[1],
-      description,
-      address: popupCoordinates.innerHTML
-    });
-
+  if (description && selectedCoordinates) {
     const marker = new Feature({
-      geometry: new Point(currentCoordinate),
+      geometry: new Point(selectedCoordinates),
+      description: description,
+      longitude: toLonLat(selectedCoordinates)[0].toFixed(6),
+      latitude: toLonLat(selectedCoordinates)[1].toFixed(6),
     });
 
-    marker.setProperties({
-      longitude: lonLat[0],
-      latitude: lonLat[1],
-      description,
-      address: popupCoordinates.innerHTML
-    });
-
-    marker.setStyle(new Style({
-      image: new Icon({
-        anchor: [0.5, 1],
-        src: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
-        scale: 0.08
+    marker.setStyle(
+      new Style({
+        image: new Icon({
+          src: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
+          scale: 0.05,
+        }),
       })
-    }));
+    );
 
     markerSource.addFeature(marker);
-    updateLocationList();
-
-    // Tutup popup dan reset form
     popup.classList.add('hidden');
     descriptionInput.value = '';
   }
 });
 
-// Tutup popup saat tombol "Cancel" diklik
+// Cancel the popup and reset form when 'Cancel' button is clicked
 cancelButton.addEventListener('click', () => {
   popup.classList.add('hidden');
   descriptionInput.value = '';
 });
 
-// Fungsi untuk menampilkan popup dengan informasi lokasi dan tombol save
-function showSavePopup(longitude, latitude, locationInfo, pixel) {
-  // Update coordinates and description
-  popupCoordinates.innerHTML = locationInfo;
-  popup.classList.remove('hidden');
+// Show marker information when clicked
+map.on('click', (event) => {
+  map.forEachFeatureAtPixel(event.pixel, (feature) => {
+    const description = feature.get('description');
+    const longitude = feature.get('longitude');
+    const latitude = feature.get('latitude');
+    if (description) {
+      const infoPopup = document.createElement('div');
+      infoPopup.className = 'popup';
+      infoPopup.innerHTML = `
+        <div class="popup-content">
+          <h3>Informasi Marker:</h3>
+          <p><strong>Deskripsi:</strong> ${description}</p>
+          <p><strong>Longitude:</strong> ${longitude}</p>
+          <p><strong>Latitude:</strong> ${latitude}</p>
+          <button id="close-info">Tutup</button>
+        </div>
+      `;
+      document.body.appendChild(infoPopup);
 
-  // Atur posisi popup berdasarkan pixel
-  popup.style.left = `${pixel[0]}px`;
-  popup.style.top = `${pixel[1]}px`;
-}
-
-// Fungsi untuk menampilkan popup dengan informasi titik lokasi
-function showPopup(title, message, pixel) {
-  const overlayPopup = document.getElementById('marker-popup');
-  const overlayTitle = overlayPopup.querySelector('.popup-title');
-  const overlayMessage = overlayPopup.querySelector('.popup-message');
-
-  overlayTitle.textContent = title;
-  overlayMessage.innerHTML = message;
-
-  // Atur posisi popup berdasarkan pixel
-  overlayPopup.style.left = `${pixel[0]}px`;
-  overlayPopup.style.top = `${pixel[1]}px`;
-  overlayPopup.classList.remove('hidden');
-}
-
-// Perbarui daftar lokasi di UI
-function updateLocationList() {
-  const locationList = document.getElementById('location-list');
-  locationList.innerHTML = '';
-  savedLocations.forEach((location, index) => {
-    const li = document.createElement('li');
-    li.innerHTML = `
-      <strong>Location ${index + 1}:</strong><br>
-      Longitude: ${location.longitude}, Latitude: ${location.latitude}<br>
-      Description: ${location.description}<br>
-      Address: ${location.address}
-    `;
-    locationList.appendChild(li);
+      infoPopup.querySelector('#close-info').addEventListener('click', () => {
+        infoPopup.remove();
+      });
+    }
   });
+});
+
+// Add user's current location marker
+function addUserLocationMarker() {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const userCoordinates = [
+          position.coords.longitude,
+          position.coords.latitude,
+        ];
+        console.log('Koordinat pengguna berhasil diperoleh:', userCoordinates);
+
+        const userMarker = new Feature({
+          geometry: new Point(fromLonLat(userCoordinates)),
+        });
+
+        userMarker.setStyle(
+          new Style({
+            image: new Icon({
+              src: 'https://cdn-icons-png.flaticon.com/512/64/64113.png', // Ikon untuk pengguna
+              scale: 0.05,
+              anchor: [0.5, 1],
+            }),
+          })
+        );
+
+        // Add marker to map
+        const userLayer = new VectorLayer({
+          source: new VectorSource({
+            features: [userMarker],
+          }),
+        });
+
+        map.addLayer(userLayer);
+
+        map.getView().animate({
+          center: fromLonLat(userCoordinates),
+          zoom: 16,
+        });
+
+        // Find nearest parking location
+        const nearestLocation = findNearestLocation(userCoordinates, parkingLocations);
+        if (nearestLocation) {
+          const nearestMarker = new Feature({
+            geometry: new Point(fromLonLat(nearestLocation.coordinates)),
+            description: nearestLocation.name,
+          });
+
+          nearestMarker.setStyle(
+            new Style({
+              image: new Icon({
+                src: 'https://cdn-icons-png.flaticon.com/512/854/854878.png', // Ikon untuk lokasi terdekat
+                scale: 0.05,
+              }),
+            })
+          );
+
+          markerSource.addFeature(nearestMarker);
+
+          // Show notification of nearest location
+          Swal.fire({
+            title: 'Lokasi Terdekat',
+            text: `Lokasi terdekat adalah ${nearestLocation.name}.`,
+            icon: 'info',
+          });
+        }
+      },
+      (error) => {
+        console.error('Gagal mendapatkan lokasi pengguna:', error.message);
+        Swal.fire({
+          title: 'Lokasi tidak tersedia',
+          text: 'Pastikan fitur lokasi di perangkat Anda aktif.',
+          icon: 'error',
+        });
+      }
+    );
+  } else {
+    Swal.fire({
+      title: 'Geolokasi tidak didukung',
+      text: 'Perangkat Anda tidak mendukung geolokasi.',
+      icon: 'warning',
+    });
+  }
 }
+
+// Parking locations data
+const parkingLocations = [
+  { name: 'Lokasi A', coordinates: [107.580642, -6.883722] },
+  { name: 'Lokasi B', coordinates: [107.579529, -6.882788] },
+];
+
+// Function to find nearest location based on turf.js
+function findNearestLocation(userCoordinates, locations) {
+  let nearest = null;
+  let minDistance = Infinity;
+
+  locations.forEach((location) => {
+    const distance = turf.distance(
+      turf.point(userCoordinates),
+      turf.point(location.coordinates)
+    );
+
+    if (distance < minDistance) {
+      minDistance = distance;
+      nearest = location;
+    }
+  });
+
+  return nearest;
+}
+
+// Call function to add user's location marker on map
+addUserLocationMarker();
